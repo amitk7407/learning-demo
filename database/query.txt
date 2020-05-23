@@ -1,0 +1,28 @@
+db.getCollection('comments').aggregate([
+    { $match: { postID: "post0", subComment: false }},
+    { $lookup: {
+        from:  "comments",
+        let: { commentId: "$_id"},
+        pipeline: [
+          { $match: { $expr: { $eq: [ "$parentCommentID",  "$$commentId" ] }}},
+          {
+            $lookup: {
+              from: "users",
+              foreignField: "_id",
+              localField: "userID",
+              as: "user"
+            }
+          },
+          {$addFields: {user: {$arrayElemAt: ["$user", 0]}}}
+        ],
+        as: 'subComments'
+      }
+    },
+    { $lookup: {
+      from: 'users',
+      localField: 'userID',
+      foreignField: '_id',
+      as: 'user'
+    }},
+    {$addFields: {user: {$arrayElemAt: ["$user", 0]}}}
+]);
