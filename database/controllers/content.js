@@ -10,7 +10,7 @@ exports.create = (req, res) => {
             res.status(400).send('Unable to save to the database');
         }
         else {
-            res.send(newContent);
+            res.send(newContent.getMappedObject());
         }
     })
 }
@@ -20,12 +20,13 @@ exports.list = (req, res) => {
         if (e) {
             res.status(500).send(e);
         }
-
-        res.send(results);
+        else {
+            res.send(results.map(r => r.getMappedObject()));
+        }
     })
 }
 
-// using a single query to get the details
+// using a single query to get the details (response is almost similar to graphLookup)
 exports.getContentDetails = (req, res) => {
     Content.aggregate([
         { $match: { _id: mongoose.Types.ObjectId(req.query.id) } },
@@ -34,13 +35,13 @@ exports.getContentDetails = (req, res) => {
                 from: Comment.collection.name,
                 let: { contentId: "$_id" },
                 pipeline: [
-                    { $match: { $expr: { $eq: ["$$contentId", "$contentId"] } } },
+                    { $match: { $expr: { $eq: ["$$contentId", "$content_id"] } } },
                     {
                         $lookup: {
                             from: Comment.collection.name,
                             let: { commentId: "$_id" },
                             pipeline: [
-                                { $match: { $expr: { $eq: ["$parentCommentId", "$$commentId"] } } },
+                                { $match: { $expr: { $eq: ["$parent_comment_id", "$$commentId"] } } },
                                 //   {
                                 //     $lookup: {
                                 //       from: "users",
@@ -69,8 +70,9 @@ exports.getContentDetails = (req, res) => {
         if (e) {
             res.status(500).send(e);
         }
-
-        res.send(results);
+        else {
+            res.send(results);
+        }
     });
 }
 
@@ -80,14 +82,34 @@ exports.getContent = (req, res) => {
         if (e) {
             res.status(500).send(e);
         }
-
-        comment.listByContent(req.query.id)
-            .then(comments => {
-                result._doc.comments = comments;
-                res.send(result);
-            })
-            .catch(err => {
-                res.status(500).send(err);
-            })
+        else {
+            return comment.listByContent(req.query.id)
+                .then(comments => {
+                    const content = result.getMappedObject();
+                    content.commentList = comments;
+                    res.send(content);
+                })
+                .catch(err => {
+                    res.status(500).send(err);
+                })
+        }
     })
+}
+
+// use comment controller to get the comments
+exports.getContentsByUserId = (userId) => {
+    return Content.find({ user_id: mongoose.Types.ObjectId(userId) })
+        .exec()
+        .then(results => {
+            const promises = results.map(r => {
+                return comment.listByContent(r.id)
+                    .then(comments => {
+                        const content = r.getMappedObject();
+                        content.commentList = comments;
+                        return content;
+                    })
+            })
+
+            return Promise.all(promises);
+        })
 }

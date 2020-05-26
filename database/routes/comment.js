@@ -6,6 +6,10 @@ router.post('/addComment', (req, res) => {
     comment.create(req, res);
 });
 
+router.get('/listAllComments', (req, res) => {
+    comment.list(req, res);
+});
+
 router.get('/listComments', (req, res) => {
     comment.listByContent(req.query.id, res);
 });

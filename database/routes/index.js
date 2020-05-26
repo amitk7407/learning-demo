@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
+const userRoutes = require('./user');
 const contentRoutes = require('./content');
 const commentRoutes = require('./comment');
 
@@ -9,6 +10,7 @@ router
         console.log('/' + req.method);
         next();
     })
+    .use('/user', userRoutes)
     .use('/content', contentRoutes)
     .use('/comment', commentRoutes);
 

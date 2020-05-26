@@ -1,12 +1,17 @@
 const mongoose = require('mongoose');
 const Comment = require('../models/comment');
+const User = require('../models/user');
 
 exports.create = (req, res) => {
     const comment = req.body;
-    comment.contentId = mongoose.Types.ObjectId(req.body.contentId);
 
-    if (req.body.parentCommentId) {
-        comment.parentCommentId = mongoose.Types.ObjectId(req.body.parentCommentId);
+    if (!comment.contentId) {
+        res.status(400).send('missing contentId');
+    }
+    comment.contentId = mongoose.Types.ObjectId(comment.contentId);
+
+    if (comment.parentCommentId) {
+        comment.parentCommentId = mongoose.Types.ObjectId(comment.parentCommentId);
     }
 
     const newComment = new Comment(comment);
@@ -15,50 +20,74 @@ exports.create = (req, res) => {
             res.status(400).send('Unable to save to the database');
         }
         else {
-            res.send(newComment);
+            res.send(newComment.getMappedObject());
+        }
+    })
+}
+
+exports.list = (req, res) => {
+    Comment.find({}).exec((e, results) => {
+        if (e) {
+            res.status(500).send(e);
+        }
+        else {
+            res.send(results.map(r => r.getMappedObject()));
         }
     })
 }
 
 exports.listByContent = (contentId, res) => {
-    return Comment.aggregate([
-        {
-            $match: {
-                // parentCommentId: { $exists: false },
-                contentId: mongoose.Types.ObjectId(contentId)
-            }
-        },
-        {
-            $lookup: {
-                from: Comment.collection.name,
-                let: { commentId: "$_id" },
-                pipeline: [
-                    { $match: { $expr: { $eq: ["$parentCommentId", "$$commentId"] } } },
-                    //   {
-                    //     $lookup: {
-                    //       from: "users",
-                    //       foreignField: "_id",
-                    //       localField: "userID",
-                    //       as: "user"
-                    //     }
-                    //   },
-                    //   {$addFields: {user: {$arrayElemAt: ["$user", 0]}}}
-                ],
-                as: 'replies'
-            }
-        },
-        // { $lookup: {
-        //   from: 'users',
-        //   localField: 'userID',
-        //   foreignField: '_id',
-        //   as: 'user'
-        // }},
-        // {$addFields: {user: {$arrayElemAt: ["$user", 0]}}}
-    ], (e, results) => {
-        if (e) {
-            throw e;
-        }
+    return Comment.find({
+        content_id: mongoose.Types.ObjectId(contentId),
+        parent_comment_id: { $exists: false }
+    })
+        .populate('user_id')
+        .exec()                         //exec will either take a callback or return a promise
+        .then(results => {
+            const promises = results.map(r => {
+                return getReplies(r)
+                    .then(result => {
+                        const comm = r.getMappedObject();
+                        comm.replies = result;
+                        return comm;
+                    })
+            })
 
-        return res ? res.send(results) : results;
-    });
+            return Promise.all(promises)
+                .then(commentsWithReplies => {
+                    return commentsWithReplies;
+                })
+        })
+        .then(result => {
+            return res ? res.send(result) : result;
+        })
+        .catch(err => {
+            if (res) {
+                res.status(500).send(err);
+            }
+            else {
+                throw err;
+            }
+        })
+}
+
+const getReplies = comment => {
+    return Comment.find({ parent_comment_id: comment._doc._id })
+        .populate('user_id')
+        .exec()
+        .then(results => {
+            const promises = results.map(r => {
+                return getReplies(r)
+                    .then(result => {
+                        const comm = r.getMappedObject();
+                        comm.replies = result;
+                        return comm;
+                    })
+            })
+
+            return Promise.all(promises)
+                .then(commentsWithReplies => {
+                    return commentsWithReplies;
+                })
+        })
 }
