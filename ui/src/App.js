@@ -22,7 +22,7 @@ function App() {
             }
             {!isLoading && user &&
               <>
-                <h1>yOu are logged in</h1>
+                <h1>You are logged in</h1>
                 <p>{user.name}</p>
                 {user.picture && <img src={user.picture} alt="My Avatar" />}
                 <hr />
